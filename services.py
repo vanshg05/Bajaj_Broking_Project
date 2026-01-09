@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from storage import instruments, orders, trades, portfolio
-from models import OrderStatus
+from models import OrderStatus, OrderType
 
 def fetch_instruments():
     return instruments
@@ -68,32 +68,57 @@ def create_trade(order):
         "symbol": order["symbol"],
         "quantity": order["quantity"],
         "price": order["price"],
+        "orderType": order["orderType"],  
         "timestamp": datetime.utcnow()
     }
     trades.append(trade)
 
 def update_portfolio(order):
-    symbol = order["symbol"]
+    symbol = order["symbol"].strip()
     qty = order["quantity"]
     price = order["price"]
+    order_type = order["orderType"]
 
-    if symbol not in portfolio:
-        portfolio[symbol] = {
-            "symbol": symbol,
-            "quantity": qty,
-            "averagePrice": price,
-            "currentValue": qty * price
-        }
-        return
+    if not symbol:
+        raise ValueError("Invalid symbol")
 
-    existing = portfolio[symbol]
     
-    total_qty = existing["quantity"] + qty
-    avg_price = (
-        (existing["quantity"] * existing["averagePrice"]) +
-        (qty * price)
-    ) / total_qty
+    if order_type == "BUY":
+        if symbol not in portfolio:
+            portfolio[symbol] = {
+                "symbol": symbol,
+                "quantity": qty,
+                "averagePrice": price,
+                "currentValue": qty * price
+            }
+            return
 
-    existing["quantity"] = total_qty
-    existing["averagePrice"] = avg_price
-    existing["currentValue"] = total_qty * price
+        existing = portfolio[symbol]
+        total_qty = existing["quantity"] + qty
+
+        avg_price = (
+            (existing["quantity"] * existing["averagePrice"]) +
+            (qty * price)
+        ) / total_qty
+
+        existing["quantity"] = total_qty
+        existing["averagePrice"] = avg_price
+        existing["currentValue"] = total_qty * price
+
+    
+    elif order_type == "SELL":
+        if symbol not in portfolio:
+            raise ValueError("Cannot sell stock not in portfolio")
+
+        existing = portfolio[symbol]
+
+        if qty > existing["quantity"]:
+            raise ValueError("Not enough quantity to sell")
+
+        remaining_qty = existing["quantity"] - qty
+
+        if remaining_qty == 0:
+            del portfolio[symbol]
+        else:
+            existing["quantity"] = remaining_qty
+            existing["currentValue"] = remaining_qty * price
